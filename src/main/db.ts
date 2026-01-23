@@ -10,12 +10,12 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 
 export function initDB() {
-  // ATENÇÃO: Adicionei pais_nascimento e cidade_nascimento
   db.exec(`
     CREATE TABLE IF NOT EXISTS monges (
       id TEXT PRIMARY KEY,
       nome TEXT,
-      titulo TEXT,
+      -- titulo REMOVIDO
+      ocupacao_oficio TEXT, -- Agora salva como JSON Array
       data_nascimento TEXT,
       pais_nascimento TEXT,
       cidade_nascimento TEXT,
@@ -27,13 +27,14 @@ export function initDB() {
       data_profissao_religiosa TEXT,
       local_profissao_religiosa TEXT,
       formacao TEXT,
-      ocupacao_oficio TEXT,
       materia_ensinada TEXT,
       livros TEXT,
       episodios_efemerides TEXT,
       exercicios_espirituais TEXT,
       doencas TEXT,
       data_falecimento TEXT,
+      nome_abade TEXT, -- NOVO
+      observacoes TEXT, -- NOVO
       referencia_manuscrito TEXT,
       referencia_edicao TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -44,20 +45,22 @@ export function initDB() {
 export const MonkDAO = {
   create: (monk: any) => {
     const defaultValues = {
-      titulo: null, data_nascimento: null, 
-      pais_nascimento: null, cidade_nascimento: null, // Novos campos
+      data_nascimento: null, pais_nascimento: null, cidade_nascimento: null,
       nome_mae: null, nome_pai: null, data_batismo: null, local_batismo: null,
       data_ingresso_mosteiro: null, data_profissao_religiosa: null,
-      local_profissao_religiosa: null, formacao: null, ocupacao_oficio: null,
+      local_profissao_religiosa: null, formacao: null,
       materia_ensinada: null, episodios_efemerides: null, exercicios_espirituais: null,
-      doencas: null, data_falecimento: null, referencia_manuscrito: null,
-      referencia_edicao: null
+      doencas: null, data_falecimento: null, 
+      nome_abade: null, observacoes: null, // Novos
+      referencia_manuscrito: null, referencia_edicao: null
     };
 
     const finalMonk = {
       ...defaultValues,
       ...monk,
-      livros: JSON.stringify(monk.livros || [])
+      // Garante que arrays virem texto JSON para o banco
+      livros: JSON.stringify(monk.livros || []),
+      ocupacao_oficio: JSON.stringify(monk.ocupacao_oficio || []) 
     };
 
     for (const key in finalMonk) {
@@ -66,17 +69,17 @@ export const MonkDAO = {
 
     const stmt = db.prepare(`
       INSERT INTO monges (
-        id, nome, titulo, data_nascimento, pais_nascimento, cidade_nascimento, nome_mae, nome_pai,
+        id, nome, ocupacao_oficio, data_nascimento, pais_nascimento, cidade_nascimento, nome_mae, nome_pai,
         data_batismo, local_batismo, data_ingresso_mosteiro, data_profissao_religiosa,
-        local_profissao_religiosa, formacao, ocupacao_oficio, materia_ensinada,
+        local_profissao_religiosa, formacao, materia_ensinada,
         livros, episodios_efemerides, exercicios_espirituais, doencas,
-        data_falecimento, referencia_manuscrito, referencia_edicao
+        data_falecimento, nome_abade, observacoes, referencia_manuscrito, referencia_edicao
       ) VALUES (
-        @id, @nome, @titulo, @data_nascimento, @pais_nascimento, @cidade_nascimento, @nome_mae, @nome_pai,
+        @id, @nome, @ocupacao_oficio, @data_nascimento, @pais_nascimento, @cidade_nascimento, @nome_mae, @nome_pai,
         @data_batismo, @local_batismo, @data_ingresso_mosteiro, @data_profissao_religiosa,
-        @local_profissao_religiosa, @formacao, @ocupacao_oficio, @materia_ensinada,
+        @local_profissao_religiosa, @formacao, @materia_ensinada,
         @livros, @episodios_efemerides, @exercicios_espirituais, @doencas,
-        @data_falecimento, @referencia_manuscrito, @referencia_edicao
+        @data_falecimento, @nome_abade, @observacoes, @referencia_manuscrito, @referencia_edicao
       )
     `);
 
@@ -88,7 +91,9 @@ export const MonkDAO = {
     const rows = stmt.all();
     return rows.map((row: any) => ({
       ...row,
-      livros: row.livros ? JSON.parse(row.livros) : []
+      // Converte de volta de Texto JSON para Array Real
+      livros: row.livros ? JSON.parse(row.livros) : [],
+      ocupacao_oficio: row.ocupacao_oficio ? JSON.parse(row.ocupacao_oficio) : []
     }));
   },
 
@@ -99,20 +104,21 @@ export const MonkDAO = {
 
   update: (monk: any) => {
     const defaultValues = {
-        titulo: null, data_nascimento: null, 
-        pais_nascimento: null, cidade_nascimento: null,
+        data_nascimento: null, pais_nascimento: null, cidade_nascimento: null,
         nome_mae: null, nome_pai: null, data_batismo: null, local_batismo: null,
         data_ingresso_mosteiro: null, data_profissao_religiosa: null,
-        local_profissao_religiosa: null, formacao: null, ocupacao_oficio: null,
+        local_profissao_religiosa: null, formacao: null,
         materia_ensinada: null, episodios_efemerides: null, exercicios_espirituais: null,
-        doencas: null, data_falecimento: null, referencia_manuscrito: null,
-        referencia_edicao: null
+        doencas: null, data_falecimento: null, 
+        nome_abade: null, observacoes: null,
+        referencia_manuscrito: null, referencia_edicao: null
     };
 
     const finalMonk = {
       ...defaultValues,
       ...monk,
-      livros: JSON.stringify(monk.livros || [])
+      livros: JSON.stringify(monk.livros || []),
+      ocupacao_oficio: JSON.stringify(monk.ocupacao_oficio || [])
     };
 
     for (const key in finalMonk) {
@@ -121,17 +127,18 @@ export const MonkDAO = {
     
     const stmt = db.prepare(`
       UPDATE monges SET
-        nome = @nome, titulo = @titulo, data_nascimento = @data_nascimento,
+        nome = @nome, ocupacao_oficio = @ocupacao_oficio, data_nascimento = @data_nascimento,
         pais_nascimento = @pais_nascimento, cidade_nascimento = @cidade_nascimento,
         nome_mae = @nome_mae, nome_pai = @nome_pai,
         data_batismo = @data_batismo, local_batismo = @local_batismo,
         data_ingresso_mosteiro = @data_ingresso_mosteiro, 
         data_profissao_religiosa = @data_profissao_religiosa,
         local_profissao_religiosa = @local_profissao_religiosa, formacao = @formacao,
-        ocupacao_oficio = @ocupacao_oficio, materia_ensinada = @materia_ensinada,
+        materia_ensinada = @materia_ensinada,
         livros = @livros, episodios_efemerides = @episodios_efemerides,
         exercicios_espirituais = @exercicios_espirituais, doencas = @doencas,
-        data_falecimento = @data_falecimento, referencia_manuscrito = @referencia_manuscrito,
+        data_falecimento = @data_falecimento, nome_abade = @nome_abade, observacoes = @observacoes,
+        referencia_manuscrito = @referencia_manuscrito,
         referencia_edicao = @referencia_edicao
       WHERE id = @id
     `);

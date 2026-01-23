@@ -10,6 +10,16 @@ const maskDate = (value: string) => {
   return value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '$1/$2').replace(/(\d{2})(\d)/, '$1/$2').replace(/(\d{4})\d+?$/, '$1');
 };
 
+// LISTA FIXA DA ORDEM DE SÃO BENTO
+const PREDEFINED_OCCUPATIONS = [
+  "Abade", "Celeireiro ou Ecônomo", "Companheiro ou secretário pessoal do abade",
+  "Conventual ou Colegial", "Cronista", "Definidor", "Doutor", "Donato ou Irmão Leigo",
+  "Frei", "Jubilado", "Mestre", "Mestre de Noviços", "Noviço", "Padre", "Passante",
+  "Postulante", "Pregador", "Pregador geral", "Pregador úrbico ou urbano", "Presidente",
+  "Prior", "Procurador", "Provedor", "Provincial", "Religioso", "Reverendo",
+  "Secretário geral", "Subprior", "Visitador", "Vogal"
+];
+
 const FILTER_GROUPS = [
   {
     title: "Vida Civil & Origem",
@@ -25,11 +35,10 @@ const FILTER_GROUPS = [
   {
     title: "Vida Monástica",
     fields: [
-      { key: 'titulo', label: 'Título Religioso', type: 'select' },
+      { key: 'ocupacao_oficio', label: 'Ocupação/Ofício', type: 'select' },
       { key: 'data_ingresso_mosteiro', label: 'Data Ingresso', type: 'date', placeholder: 'DD/MM/AAAA' },
       { key: 'local_profissao_religiosa', label: 'Local Profissão', type: 'select' },
       { key: 'data_profissao_religiosa', label: 'Data Profissão', type: 'date', placeholder: 'DD/MM/AAAA' },
-      { key: 'ocupacao_oficio', label: 'Ocupação/Ofício', type: 'select' },
       { key: 'materia_ensinada', label: 'Matéria Ensinada', type: 'select' },
     ]
   },
@@ -61,7 +70,6 @@ function App() {
     fetchMonks();
   }, []);
 
-  // --- NOVAS FUNÇÕES DE BACKUP ---
   const handleBackup = async () => {
     // @ts-ignore
     const success = await window.api.backupDB();
@@ -73,12 +81,23 @@ function App() {
       // @ts-ignore
       const success = await window.api.restoreDB();
       if (!success) alert('A restauração foi cancelada ou falhou.');
-      // Se der sucesso, o backend recarrega a janela automaticamente.
     }
   };
-  // -------------------------------
+
+  // Calcula todas as ocupações (Fixas + Do Banco)
+  const allOccupations = useMemo(() => {
+    const set = new Set<string>(PREDEFINED_OCCUPATIONS); // Começa com a lista fixa
+    monks.forEach(m => {
+      if (Array.isArray(m.ocupacao_oficio)) {
+        m.ocupacao_oficio.forEach(o => set.add(o));
+      }
+    });
+    return Array.from(set).sort();
+  }, [monks]);
 
   const getUniqueOptions = (key: keyof Monk) => {
+    if (key === 'ocupacao_oficio') return allOccupations;
+
     const values = monks.map(m => m[key]).filter(v => v !== null && v !== "" && !Array.isArray(v));
     // @ts-ignore
     return Array.from(new Set(values)).sort();
@@ -93,6 +112,9 @@ function App() {
 
       const matchesFilters = Object.entries(activeFilters).every(([key, filterValue]) => {
         if (!filterValue) return true;
+        if (key === 'ocupacao_oficio') {
+           return m.ocupacao_oficio && m.ocupacao_oficio.includes(filterValue);
+        }
         // @ts-ignore
         const dbValue = m[key];
         if (!dbValue) return false;
@@ -155,7 +177,16 @@ function App() {
   };
 
   if (view === 'form') {
-    return <div className="min-h-screen bg-gray-100 py-8 px-4"><MonkForm initialData={editingMonk} onSubmit={handleSave} onCancel={() => setView('list')} /></div>;
+    return (
+      <div className="min-h-screen bg-gray-100 py-8 px-4">
+        <MonkForm 
+          initialData={editingMonk} 
+          onSubmit={handleSave} 
+          onCancel={() => setView('list')}
+          existingOccupations={allOccupations}
+        />
+      </div>
+    );
   }
 
   return (
@@ -170,7 +201,6 @@ function App() {
           </div>
           <div className="flex gap-2 items-center">
             
-            {/* GRUPO DE BACKUP (Botões Novos) */}
             <div className="flex gap-2 mr-4 border-r pr-4">
               <button 
                 onClick={handleBackup}
@@ -188,7 +218,6 @@ function App() {
               </button>
             </div>
 
-            {/* BOTÕES DE NAVEGAÇÃO E GRÁFICOS */}
             <div className="bg-white p-1 rounded border shadow-sm flex mr-2">
                <button 
                  onClick={() => setView('list')}
@@ -215,7 +244,7 @@ function App() {
           </div>
         </div>
 
-        {/* ÁREA DE FILTROS (COMPARTILHADA) */}
+        {/* ÁREA DE FILTROS */}
         <div className="mb-6 bg-white p-4 rounded shadow border border-gray-100">
              <div className="flex gap-4 mb-2">
                 <input 
@@ -272,7 +301,7 @@ function App() {
             )}
         </div>
 
-        {/* CONTEÚDO PRINCIPAL (Troca entre Lista e Dashboard) */}
+        {/* CONTEÚDO PRINCIPAL */}
         {view === 'dashboard' ? (
            <Dashboard monks={filteredMonks} />
         ) : (
@@ -280,7 +309,7 @@ function App() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome / Título</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome / Ocupação</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origem</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profissão</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
@@ -291,7 +320,11 @@ function App() {
                     <tr key={monk.id} onClick={() => setViewingMonk(monk)} className="hover:bg-blue-50 transition-colors cursor-pointer">
                       <td className="px-6 py-4">
                         <div className="text-sm font-bold text-gray-900">{monk.nome}</div>
-                        <div className="text-sm text-gray-500">{monk.titulo}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                          {monk.ocupacao_oficio && monk.ocupacao_oficio.length > 0 
+                            ? monk.ocupacao_oficio.join(', ') 
+                            : '-'}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                          {monk.cidade_nascimento} - {monk.pais_nascimento} <br/>
