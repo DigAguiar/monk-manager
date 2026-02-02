@@ -43,11 +43,11 @@ const calculateAverageAge = (monks: Monk[]) => {
 // --- SUB-COMPONENTES ---
 
 const StatCard = ({ label, value, subtext }: { label: string, value: string | number, subtext?: string }) => (
-  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between h-24">
-    <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">{label}</p>
+  <div className="bg-white p-5 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between h-32">
+    <p className="text-gray-500 text-sm font-bold uppercase tracking-wider">{label}</p>
     <div>
-      <p className="text-2xl font-bold text-gray-800">{value}</p>
-      {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+      <p className="text-4xl font-bold text-gray-800">{value}</p>
+      {subtext && <p className="text-sm text-gray-400 mt-1">{subtext}</p>}
     </div>
   </div>
 );
@@ -56,16 +56,19 @@ const BarChart = ({ data, colorClass }: { data: {label: string, value: number}[]
   const maxVal = Math.max(...data.map(d => d.value)) || 1;
   
   return (
-    <div className="space-y-3 mt-4">
+    // AUMENTO: Espaçamento maior entre itens (space-y-4) e margem superior (mt-6)
+    <div className="space-y-4 mt-6">
       {data.slice(0, 8).map((item) => (
         <div key={item.label}>
-          <div className="flex justify-between text-xs mb-1">
+          {/* AUMENTO: Fonte maior (text-sm) */}
+          <div className="flex justify-between text-sm mb-1">
             <span className="font-medium text-gray-700 truncate w-3/4" title={item.label}>{item.label}</span>
             <span className="font-bold text-gray-900">{item.value}</span>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
+          {/* AUMENTO: Barra mais grossa (h-3) */}
+          <div className="w-full bg-gray-100 rounded-full h-3">
             <div 
-              className={`h-2 rounded-full ${colorClass}`} 
+              className={`h-3 rounded-full ${colorClass}`} 
               style={{ width: `${(item.value / maxVal) * 100}%` }}
             ></div>
           </div>
@@ -81,8 +84,6 @@ const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
 
   const total = data.reduce((acc, curr) => acc + curr.value, 0);
 
-  // Lógica de Agrupamento "Outros"
-  // Se tiver mais de 9 itens, pegamos os 8 primeiros e somamos o resto em "Outros"
   const chartData = useMemo(() => {
     if (data.length <= 9) return data;
     
@@ -96,7 +97,6 @@ const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
     ];
   }, [data]);
   
-  // Gera o Gradiente Cônico
   let currentAngle = 0;
   const gradientParts = chartData.map((item, index) => {
     const percentage = (item.value / total) * 100;
@@ -111,27 +111,25 @@ const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
 
   return (
     <div className="flex flex-col items-center justify-center py-6">
-      {/* O Gráfico */}
       <div 
-        className="w-56 h-56 rounded-full shadow-inner relative"
+        className="w-80 h-80 rounded-full shadow-inner relative"
         style={{ background: `conic-gradient(${gradientParts.join(', ')})` }}
       >
-        <div className="absolute inset-0 m-auto w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-sm flex-col">
-           <span className="text-2xl font-bold text-gray-700">{total}</span>
-           <span className="text-[10px] text-gray-400 uppercase">Total</span>
+        <div className="absolute inset-0 m-auto w-40 h-40 bg-white rounded-full flex items-center justify-center shadow-sm flex-col">
+           <span className="text-4xl font-bold text-gray-700">{total}</span>
+           <span className="text-sm text-gray-400 uppercase font-bold mt-1">Total</span>
         </div>
       </div>
       
-      {/* Legenda Dinâmica (Com "Outros") */}
-      <div className="flex flex-wrap justify-center gap-2 mt-6 max-w-lg">
+      <div className="flex flex-wrap justify-center gap-2 mt-8 max-w-2xl">
         {chartData.map((item, index) => {
            // @ts-ignore
            const color = item.isOther ? COLOR_OTHER : COLORS[index % COLORS.length];
            return (
-            <div key={item.label} className="flex items-center gap-1.5 text-xs bg-gray-50 px-2 py-1 rounded border hover:bg-gray-100 transition-colors" title={item.label}>
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }}></div>
-              <span className="font-medium text-gray-700 max-w-[120px] truncate">{item.label}</span>
-              <span className="text-gray-400 border-l pl-1 ml-1 font-mono">{Math.round((item.value/total)*100)}%</span>
+            <div key={item.label} className="flex items-center gap-1.5 text-xs bg-gray-50 px-3 py-1.5 rounded border hover:bg-gray-100 transition-colors" title={item.label}>
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }}></div>
+              <span className="font-medium text-gray-700 max-w-[140px] truncate text-sm">{item.label}</span>
+              <span className="text-gray-900 font-bold border-l pl-2 ml-1 font-mono text-sm">{Math.round((item.value/total)*100)}%</span>
             </div>
            );
         })}
@@ -232,7 +230,7 @@ export function Dashboard({ monks }: DashboardProps) {
         {/* Área de Captura */}
         <div ref={printRef} className="p-8 bg-white grid grid-cols-1 lg:grid-cols-3 gap-8">
           
-          <div className="lg:col-span-2 flex flex-col items-center">
+          <div className="lg:col-span-2 flex flex-col items-center justify-center min-h-[400px]">
             <h3 className="text-lg font-bold text-gray-800 mb-2 text-center uppercase tracking-wide">
               Distribuição Proporcional
             </h3>
@@ -241,12 +239,10 @@ export function Dashboard({ monks }: DashboardProps) {
           </div>
 
           <div className="border-l pl-8 border-gray-100 flex flex-col justify-center">
-            <h3 className="text-sm font-bold text-gray-500 uppercase mb-4">Ranking (Top 8)</h3>
+            {/* AUMENTO: Título maior (text-lg) */}
+            <h3 className="text-lg font-bold text-gray-500 uppercase mb-4">Ranking (Top 8)</h3>
             <BarChart data={statsData} colorClass="bg-gray-600" />
             
-            <div className="mt-8 p-4 bg-blue-50 rounded border border-blue-100 text-xs text-blue-800">
-              <p><strong>Nota:</strong> O gráfico de pizza agrupa categorias menores em "Outros" para facilitar a leitura visual.</p>
-            </div>
           </div>
 
         </div>

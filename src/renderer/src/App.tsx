@@ -196,7 +196,7 @@ function App() {
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Acervo Monástico</h1>
+            <h2 className="text-3xl font-bold text-gray-800">Dietário Volume 1</h2>
             <p className="text-gray-500">Mostrando {filteredMonks.length} registros</p>
           </div>
           <div className="flex gap-2 items-center">
