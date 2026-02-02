@@ -25,6 +25,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "better-sqlite3": "^12.6.2",
+    "html2canvas": "^1.4.1",
     "react-hook-form": "^7.71.1",
     "uuid": "^13.0.0"
   },

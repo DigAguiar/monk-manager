@@ -1,55 +1,77 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { Monk } from '../types/monk.type';
+import html2canvas from 'html2canvas';
 
 interface DashboardProps {
   monks: Monk[];
 }
 
-// Cores para o gráfico de pizza
-const PIE_COLORS = [
+// Cores vibrantes para o Top 8
+const COLORS = [
   '#3b82f6', // Azul
   '#ef4444', // Vermelho
   '#10b981', // Verde
   '#f59e0b', // Amarelo
   '#8b5cf6', // Roxo
   '#ec4899', // Rosa
-  '#6366f1', // Indigo
-  '#14b8a6', // Teal
-  '#94a3b8'  // Cinza (outros)
+  '#06b6d4', // Ciano
+  '#f97316'  // Laranja
 ];
+const COLOR_OTHER = '#64748b'; // Cinza para "Outros"
+
+// --- HELPERS ---
+
+const calculateAverageAge = (monks: Monk[]) => {
+  let totalAge = 0;
+  let count = 0;
+
+  monks.forEach(m => {
+    if (m.data_nascimento && m.data_falecimento && m.data_nascimento.length === 10 && m.data_falecimento.length === 10) {
+      const yearBirth = parseInt(m.data_nascimento.split('/')[2]);
+      const yearDeath = parseInt(m.data_falecimento.split('/')[2]);
+      
+      if (!isNaN(yearBirth) && !isNaN(yearDeath) && yearDeath > yearBirth) {
+        totalAge += (yearDeath - yearBirth);
+        count++;
+      }
+    }
+  });
+
+  return count > 0 ? Math.round(totalAge / count) + ' anos' : 'N/A';
+};
 
 // --- SUB-COMPONENTES ---
 
-const StatCard = ({ label, value }: { label: string, value: string | number }) => (
-  <div className="bg-gradient-to-br from-white to-gray-50 p-4 rounded-lg shadow border border-gray-200">
+const StatCard = ({ label, value, subtext }: { label: string, value: string | number, subtext?: string }) => (
+  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col justify-between h-24">
     <p className="text-gray-500 text-xs font-bold uppercase tracking-wider">{label}</p>
-    <p className="text-3xl font-bold text-blue-900 mt-1">{value}</p>
+    <div>
+      <p className="text-2xl font-bold text-gray-800">{value}</p>
+      {subtext && <p className="text-xs text-gray-400 mt-1">{subtext}</p>}
+    </div>
   </div>
 );
 
-const BarChart = ({ data, title, colorClass }: { data: {label: string, value: number}[], title: string, colorClass: string }) => {
+const BarChart = ({ data, colorClass }: { data: {label: string, value: number}[], colorClass: string }) => {
   const maxVal = Math.max(...data.map(d => d.value)) || 1;
   
   return (
-    <div className="bg-white p-5 rounded-lg shadow border border-gray-100 h-full">
-      <h3 className="text-gray-600 font-bold uppercase text-xs mb-4">{title}</h3>
-      <div className="space-y-3">
-        {data.slice(0, 6).map((item) => (
-          <div key={item.label}>
-            <div className="flex justify-between text-sm mb-1">
-              <span className="font-medium text-gray-700 truncate w-3/4" title={item.label}>{item.label}</span>
-              <span className="font-bold text-gray-900">{item.value}</span>
-            </div>
-            <div className="w-full bg-gray-100 rounded-full h-2.5">
-              <div 
-                className={`h-2.5 rounded-full ${colorClass}`} 
-                style={{ width: `${(item.value / maxVal) * 100}%` }}
-              ></div>
-            </div>
+    <div className="space-y-3 mt-4">
+      {data.slice(0, 8).map((item) => (
+        <div key={item.label}>
+          <div className="flex justify-between text-xs mb-1">
+            <span className="font-medium text-gray-700 truncate w-3/4" title={item.label}>{item.label}</span>
+            <span className="font-bold text-gray-900">{item.value}</span>
           </div>
-        ))}
-        {data.length === 0 && <p className="text-gray-400 italic text-sm">Sem dados para exibir</p>}
-      </div>
+          <div className="w-full bg-gray-100 rounded-full h-2">
+            <div 
+              className={`h-2 rounded-full ${colorClass}`} 
+              style={{ width: `${(item.value / maxVal) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+      ))}
+      {data.length === 0 && <p className="text-gray-400 italic text-sm">Sem dados para exibir</p>}
     </div>
   );
 };
@@ -57,57 +79,62 @@ const BarChart = ({ data, title, colorClass }: { data: {label: string, value: nu
 const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
   if (data.length === 0) return <div className="h-64 flex items-center justify-center text-gray-400 italic">Sem dados suficientes</div>;
 
-  // Calcula o total para porcentagens
   const total = data.reduce((acc, curr) => acc + curr.value, 0);
+
+  // Lógica de Agrupamento "Outros"
+  // Se tiver mais de 9 itens, pegamos os 8 primeiros e somamos o resto em "Outros"
+  const chartData = useMemo(() => {
+    if (data.length <= 9) return data;
+    
+    const top8 = data.slice(0, 8);
+    const rest = data.slice(8);
+    const restValue = rest.reduce((acc, curr) => acc + curr.value, 0);
+    
+    return [
+      ...top8,
+      { label: 'Outros / Diversos', value: restValue, isOther: true }
+    ];
+  }, [data]);
   
-  // Cria o gradiente cônico CSS
+  // Gera o Gradiente Cônico
   let currentAngle = 0;
-  const gradientParts = data.slice(0, 8).map((item, index) => {
+  const gradientParts = chartData.map((item, index) => {
     const percentage = (item.value / total) * 100;
-    const color = PIE_COLORS[index % PIE_COLORS.length];
+    // @ts-ignore
+    const color = item.isOther ? COLOR_OTHER : COLORS[index % COLORS.length];
+    
     const start = currentAngle;
     const end = currentAngle + percentage;
     currentAngle = end;
     return `${color} ${start}% ${end}%`;
   });
 
-  // Se sobrou algo (tail), pinta de cinza
-  if (currentAngle < 100) {
-    gradientParts.push(`#e2e8f0 ${currentAngle}% 100%`);
-  }
-
-  const gradientString = `conic-gradient(${gradientParts.join(', ')})`;
-
   return (
-    <div className="flex flex-col md:flex-row items-center justify-center gap-8 py-4">
-      {/* O Círculo */}
+    <div className="flex flex-col items-center justify-center py-6">
+      {/* O Gráfico */}
       <div 
-        className="w-48 h-48 rounded-full shadow-inner relative"
-        style={{ background: gradientString }}
+        className="w-56 h-56 rounded-full shadow-inner relative"
+        style={{ background: `conic-gradient(${gradientParts.join(', ')})` }}
       >
-        {/* Buraco no meio para fazer virar "Donut" (Opcional, deixa mais bonito) */}
-        <div className="absolute inset-0 m-auto w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-sm">
-           <span className="text-gray-400 text-xs font-bold">TOTAL: {total}</span>
+        <div className="absolute inset-0 m-auto w-28 h-28 bg-white rounded-full flex items-center justify-center shadow-sm flex-col">
+           <span className="text-2xl font-bold text-gray-700">{total}</span>
+           <span className="text-[10px] text-gray-400 uppercase">Total</span>
         </div>
       </div>
-
-      {/* A Legenda */}
-      <div className="flex-1 space-y-2 min-w-[200px]">
-        {data.slice(0, 8).map((item, index) => (
-          <div key={item.label} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <div 
-                className="w-3 h-3 rounded-full" 
-                style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
-              ></div>
-              <span className="text-gray-700 truncate max-w-[120px]" title={item.label}>{item.label}</span>
+      
+      {/* Legenda Dinâmica (Com "Outros") */}
+      <div className="flex flex-wrap justify-center gap-2 mt-6 max-w-lg">
+        {chartData.map((item, index) => {
+           // @ts-ignore
+           const color = item.isOther ? COLOR_OTHER : COLORS[index % COLORS.length];
+           return (
+            <div key={item.label} className="flex items-center gap-1.5 text-xs bg-gray-50 px-2 py-1 rounded border hover:bg-gray-100 transition-colors" title={item.label}>
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }}></div>
+              <span className="font-medium text-gray-700 max-w-[120px] truncate">{item.label}</span>
+              <span className="text-gray-400 border-l pl-1 ml-1 font-mono">{Math.round((item.value/total)*100)}%</span>
             </div>
-            <span className="font-bold text-gray-900">{Math.round((item.value/total)*100)}% ({item.value})</span>
-          </div>
-        ))}
-        {data.length > 8 && (
-          <div className="text-xs text-gray-400 text-right mt-2">+ {data.length - 8} outros</div>
-        )}
+           );
+        })}
       </div>
     </div>
   );
@@ -116,94 +143,113 @@ const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
 // --- COMPONENTE PRINCIPAL ---
 
 export function Dashboard({ monks }: DashboardProps) {
-  
-  // Estado para controlar qual gráfico o cliente quer ver
-  const [selectedPieMetric, setSelectedPieMetric] = useState<keyof Monk>('ocupacao_oficio');
+  const [selectedMetric, setSelectedMetric] = useState<keyof Monk>('ocupacao_oficio');
+  const printRef = useRef<HTMLDivElement>(null);
 
-  // Lógica Avançada de Contagem (Suporta Texto E Arrays)
+  const handleDownloadImage = async () => {
+    if (printRef.current) {
+      try {
+        const canvas = await html2canvas(printRef.current, { backgroundColor: '#ffffff', scale: 2 });
+        const image = canvas.toDataURL("image/png");
+        const link = document.createElement("a");
+        link.href = image;
+        link.download = `grafico_acervo_${selectedMetric}_${new Date().toISOString().slice(0,10)}.png`;
+        link.click();
+      } catch (error) {
+        console.error("Erro print:", error);
+        alert("Erro ao salvar imagem.");
+      }
+    }
+  };
+
   const getStats = (key: keyof Monk) => {
     const counts: Record<string, number> = {};
-    
     monks.forEach(m => {
       const rawVal = m[key];
-
       if (Array.isArray(rawVal)) {
-        // Se for lista (ex: ocupações), conta cada item individualmente
-        if (rawVal.length === 0) {
-           counts['Não informado'] = (counts['Não informado'] || 0) + 1;
-        } else {
-           rawVal.forEach(v => {
-             counts[v] = (counts[v] || 0) + 1;
-           });
-        }
+        if (rawVal.length === 0) counts['Não informado'] = (counts['Não informado'] || 0) + 1;
+        else rawVal.forEach(v => counts[v] = (counts[v] || 0) + 1);
       } else {
-        // Se for texto normal
         const val = rawVal ? String(rawVal) : 'Não informado';
         counts[val] = (counts[val] || 0) + 1;
       }
     });
-    
     return Object.entries(counts)
       .map(([label, value]) => ({ label, value }))
       .sort((a, b) => b.value - a.value);
   };
 
-  // Dados calculados
-  const statsPie = useMemo(() => getStats(selectedPieMetric), [monks, selectedPieMetric]);
-  const statsPais = useMemo(() => getStats('pais_nascimento'), [monks]);
-  const statsCidade = useMemo(() => getStats('cidade_nascimento'), [monks]);
-  const statsDoenca = useMemo(() => getStats('doencas'), [monks]);
-  const statsOcupacao = useMemo(() => getStats('ocupacao_oficio'), [monks]);
+  const statsData = useMemo(() => getStats(selectedMetric), [monks, selectedMetric]);
+  
+  const averageAge = useMemo(() => calculateAverageAge(monks), [monks]);
+  const topOccupation = useMemo(() => {
+    const stats = getStats('ocupacao_oficio');
+    return stats.length > 0 ? stats[0].label : '-';
+  }, [monks]);
 
   return (
-    <div className="space-y-6 animate-fade-in pb-10">
+    <div className="space-y-6 animate-fade-in pb-12">
       
-      {/* 1. Resumo Numérico */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard label="Total Registros" value={monks.length} />
-        <StatCard label="Países" value={statsPais.length} />
-        <StatCard label="Cidades" value={statsCidade.length} />
-        <StatCard label="Ocupações" value={statsOcupacao.length} />
+      {/* 1. INDICADORES (KPIs) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <StatCard label="Total Filtrado" value={monks.length} subtext="Monges listados" />
+        <StatCard label="Idade Média Est." value={averageAge} subtext="Baseado nas datas informadas" />
+        <StatCard label="Ocupação Principal" value={topOccupation} subtext="Função mais comum no grupo" />
       </div>
 
-      {/* 2. Área do Gráfico Dinâmico (Cliente escolhe) */}
-      <div className="bg-white p-6 rounded-lg shadow border border-blue-100">
-        <div className="flex justify-between items-center mb-6 border-b pb-4">
-          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-            📊 Análise Visual
-          </h2>
-          
-          {/* O Seletor Mágico */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Visualizar por:</span>
+      {/* 2. ÁREA DE GRÁFICO (Exportável) */}
+      <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+        
+        {/* Barra de Ferramentas */}
+        <div className="bg-gray-50 p-4 border-b flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <span className="text-sm font-bold text-gray-500 uppercase">Analisar por:</span>
             <select 
-              className="p-2 border rounded bg-gray-50 text-sm font-bold text-blue-700 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              value={selectedPieMetric}
+              className="flex-1 sm:flex-none p-2 border border-gray-300 rounded bg-white text-sm font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm cursor-pointer"
+              value={selectedMetric}
               // @ts-ignore
-              onChange={(e) => setSelectedPieMetric(e.target.value)}
+              onChange={(e) => setSelectedMetric(e.target.value)}
             >
               <option value="ocupacao_oficio">Ocupação / Ofício</option>
+              <option value="doencas">Causa de Morte / Doenças</option>
               <option value="pais_nascimento">País de Nascimento</option>
               <option value="cidade_nascimento">Cidade de Nascimento</option>
-              <option value="doencas">Causa Mortis / Doenças</option>
               <option value="local_profissao_religiosa">Local Profissão Religiosa</option>
+              <option value="local_batismo">Local de Batismo</option>
+              <option value="materia_ensinada">Matéria Ensinada</option>
+              <option value="nome_abade">Abade da Época</option>
             </select>
           </div>
+
+          <button 
+            onClick={handleDownloadImage}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded shadow transition-colors"
+          >
+            📷 Baixar Gráfico
+          </button>
         </div>
 
-        <PieChart data={statsPie} />
-      </div>
+        {/* Área de Captura */}
+        <div ref={printRef} className="p-8 bg-white grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          <div className="lg:col-span-2 flex flex-col items-center">
+            <h3 className="text-lg font-bold text-gray-800 mb-2 text-center uppercase tracking-wide">
+              Distribuição Proporcional
+            </h3>
+            <p className="text-sm text-gray-400 mb-6 text-center">Baseado em {monks.length} registros filtrados</p>
+            <PieChart data={statsData} />
+          </div>
 
-      {/* 3. Gráficos de Barra Fixos (Resumo Rápido) */}
-      <h3 className="text-gray-500 font-bold uppercase text-xs mt-8 mb-2 pl-1">Outras Métricas</h3>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <BarChart data={statsPais} title="Top Países" colorClass="bg-blue-500" />
-        <BarChart data={statsCidade} title="Top Cidades" colorClass="bg-green-500" />
-        <BarChart data={statsDoenca} title="Causa Mortis / Doenças" colorClass="bg-red-500" />
-      </div>
+          <div className="border-l pl-8 border-gray-100 flex flex-col justify-center">
+            <h3 className="text-sm font-bold text-gray-500 uppercase mb-4">Ranking (Top 8)</h3>
+            <BarChart data={statsData} colorClass="bg-gray-600" />
+            
+            <div className="mt-8 p-4 bg-blue-50 rounded border border-blue-100 text-xs text-blue-800">
+              <p><strong>Nota:</strong> O gráfico de pizza agrupa categorias menores em "Outros" para facilitar a leitura visual.</p>
+            </div>
+          </div>
 
-      <div className="text-center text-gray-400 text-xs mt-4">
-        * Os dados acima reagem aos filtros da lista principal.
+        </div>
       </div>
     </div>
   );
