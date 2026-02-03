@@ -4,52 +4,13 @@ import { MonkForm } from './components/MonkForm';
 import { MonkDetails } from './components/MonkDetails';
 import { SearchableSelect } from './components/SearchableSelect';
 import { Dashboard } from './components/Dashboard';
+import { Pagination } from './components/Pagination'; // <--- Novo Componente
 
-// Máscara de data
-const maskDate = (value: string) => {
-  return value.replace(/\D/g, '').replace(/(\d{2})(\d)/, '$1/$2').replace(/(\d{2})(\d)/, '$1/$2').replace(/(\d{4})\d+?$/, '$1');
-};
+// Importações Refatoradas
+import { PREDEFINED_OCCUPATIONS, FILTER_GROUPS } from './constants/data';
+import { maskDate } from './utils/formatters';
 
-// LISTA FIXA DA ORDEM DE SÃO BENTO
-const PREDEFINED_OCCUPATIONS = [
-  "Abade", "Celeireiro ou Ecônomo", "Companheiro ou secretário pessoal do abade",
-  "Conventual ou Colegial", "Cronista", "Definidor", "Doutor", "Donato ou Irmão Leigo",
-  "Frei", "Jubilado", "Mestre", "Mestre de Noviços", "Noviço", "Padre", "Passante",
-  "Postulante", "Pregador", "Pregador geral", "Pregador úrbico ou urbano", "Presidente",
-  "Prior", "Procurador", "Provedor", "Provincial", "Religioso", "Reverendo",
-  "Secretário geral", "Subprior", "Visitador", "Vogal"
-];
-
-const FILTER_GROUPS = [
-  {
-    title: "Vida Civil & Origem",
-    fields: [
-      { key: 'pais_nascimento', label: 'País Nascimento', type: 'select' },
-      { key: 'cidade_nascimento', label: 'Cidade Nascimento', type: 'select' },
-      { key: 'data_nascimento', label: 'Data Nascimento', type: 'date', placeholder: 'DD/MM/AAAA' },
-      { key: 'nome_pai', label: 'Nome do Pai', type: 'select' },
-      { key: 'nome_mae', label: 'Nome da Mãe', type: 'select' },
-      { key: 'local_batismo', label: 'Local Batismo', type: 'select' },
-    ]
-  },
-  {
-    title: "Vida Monástica",
-    fields: [
-      { key: 'ocupacao_oficio', label: 'Ocupação/Ofício', type: 'select' },
-      { key: 'data_ingresso_mosteiro', label: 'Data Ingresso', type: 'date', placeholder: 'DD/MM/AAAA' },
-      { key: 'local_profissao_religiosa', label: 'Local Profissão', type: 'select' },
-      { key: 'data_profissao_religiosa', label: 'Data Profissão', type: 'date', placeholder: 'DD/MM/AAAA' },
-      { key: 'materia_ensinada', label: 'Matéria Ensinada', type: 'select' },
-    ]
-  },
-  {
-    title: "Legado & Fim",
-    fields: [
-      { key: 'doencas', label: 'Doenças/Causa Mortis', type: 'select' },
-      { key: 'data_falecimento', label: 'Data Falecimento', type: 'date', placeholder: 'DD/MM/AAAA' },
-    ]
-  }
-];
+const ITEMS_PER_PAGE = 10;
 
 function App() {
   const [monks, setMonks] = useState<Monk[]>([]);
@@ -61,6 +22,9 @@ function App() {
   const [activeFilters, setActiveFilters] = useState<Record<string, string>>({});
   const [viewingMonk, setViewingMonk] = useState<Monk | null>(null);
 
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(1);
+
   const fetchMonks = async () => {
     const data = await window.api.getAllMonks();
     setMonks(data);
@@ -69,6 +33,11 @@ function App() {
   useEffect(() => {
     fetchMonks();
   }, []);
+
+  // Resetar para a página 1 sempre que filtrar ou buscar
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, activeFilters]);
 
   const handleBackup = async () => {
     // @ts-ignore
@@ -84,9 +53,8 @@ function App() {
     }
   };
 
-  // Calcula todas as ocupações (Fixas + Do Banco)
   const allOccupations = useMemo(() => {
-    const set = new Set<string>(PREDEFINED_OCCUPATIONS); // Começa com a lista fixa
+    const set = new Set<string>(PREDEFINED_OCCUPATIONS); 
     monks.forEach(m => {
       if (Array.isArray(m.ocupacao_oficio)) {
         m.ocupacao_oficio.forEach(o => set.add(o));
@@ -103,6 +71,7 @@ function App() {
     return Array.from(new Set(values)).sort();
   };
 
+  // 1. Aplica Filtros
   const filteredMonks = useMemo(() => {
     return monks.filter(m => {
       const matchesSearch = 
@@ -124,6 +93,15 @@ function App() {
       return matchesSearch && matchesFilters;
     });
   }, [monks, searchTerm, activeFilters]);
+
+  // 2. Aplica Paginação
+  const paginatedMonks = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    return filteredMonks.slice(startIndex, endIndex);
+  }, [filteredMonks, currentPage]);
+
+  const totalPages = Math.ceil(filteredMonks.length / ITEMS_PER_PAGE);
 
   // Actions
   const handleSave = async (data: Monk) => {
@@ -196,8 +174,8 @@ function App() {
         {/* HEADER */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-3xl font-bold text-gray-800">Dietário Volume 1</h2>
-            <p className="text-gray-500">Mostrando {filteredMonks.length} registros</p>
+            <h1 className="text-3xl font-bold text-gray-800">Dietário Volume 1</h1>
+            <p className="text-gray-500">Mostrando {filteredMonks.length} registros (Total)</p>
           </div>
           <div className="flex gap-2 items-center">
             
@@ -305,41 +283,54 @@ function App() {
         {view === 'dashboard' ? (
            <Dashboard monks={filteredMonks} />
         ) : (
-           <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome / Ocupação</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origem</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profissão</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredMonks.map((monk) => (
-                    <tr key={monk.id} onClick={() => setViewingMonk(monk)} className="hover:bg-blue-50 transition-colors cursor-pointer">
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-bold text-gray-900">{monk.nome}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {monk.ocupacao_oficio && monk.ocupacao_oficio.length > 0 
-                            ? monk.ocupacao_oficio.join(', ') 
-                            : '-'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                         {monk.cidade_nascimento} - {monk.pais_nascimento} <br/>
-                         <span className="text-xs text-gray-400">{monk.data_nascimento}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">{monk.data_profissao_religiosa}</td>
-                      <td className="px-6 py-4 text-right text-sm font-medium">
-                        <button onClick={(e) => { e.stopPropagation(); startEdit(monk); }} className="text-blue-600 mr-4">Editar</button>
-                        <button onClick={(e) => { e.stopPropagation(); monk.id && handleDelete(monk.id); }} className="text-red-600">Excluir</button>
-                      </td>
+           <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col min-h-[500px]">
+              
+              {/* TABELA */}
+              <div className="flex-1 overflow-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50 sticky top-0 z-10">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nome / Ocupação</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Origem</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Profissão</th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
                     </tr>
-                  ))}
-                  {filteredMonks.length === 0 && <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Nenhum registro.</td></tr>}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedMonks.map((monk) => (
+                      <tr key={monk.id} onClick={() => setViewingMonk(monk)} className="hover:bg-blue-50 transition-colors cursor-pointer">
+                        <td className="px-6 py-4">
+                          <div className="text-sm font-bold text-gray-900">{monk.nome}</div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {monk.ocupacao_oficio && monk.ocupacao_oficio.length > 0 
+                              ? monk.ocupacao_oficio.join(', ') 
+                              : '-'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {monk.cidade_nascimento} - {monk.pais_nascimento} <br/>
+                          <span className="text-xs text-gray-400">{monk.data_nascimento}</span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">{monk.data_profissao_religiosa}</td>
+                        <td className="px-6 py-4 text-right text-sm font-medium">
+                          <button onClick={(e) => { e.stopPropagation(); startEdit(monk); }} className="text-blue-600 mr-4">Editar</button>
+                          <button onClick={(e) => { e.stopPropagation(); monk.id && handleDelete(monk.id); }} className="text-red-600">Excluir</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {paginatedMonks.length === 0 && <tr><td colSpan={4} className="px-6 py-10 text-center text-gray-500">Nenhum registro encontrado.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* PAGINAÇÃO NOVA */}
+              {filteredMonks.length > 0 && (
+                <Pagination 
+                  currentPage={currentPage} 
+                  totalPages={totalPages} 
+                  onPageChange={setCurrentPage} 
+                />
+              )}
            </div>
         )}
 

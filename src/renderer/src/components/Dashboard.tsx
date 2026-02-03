@@ -19,6 +19,18 @@ const COLORS = [
 ];
 const COLOR_OTHER = '#64748b'; // Cinza para "Outros"
 
+// --- MAPA DE TÍTULOS (Para exibição bonita no gráfico) ---
+const METRIC_TITLES: Record<string, string> = {
+  'ocupacao_oficio': 'Ocupação / Ofício',
+  'doencas': 'Causa de Morte / Doenças',
+  'pais_nascimento': 'País de Nascimento',
+  'cidade_nascimento': 'Cidade de Nascimento',
+  'local_profissao_religiosa': 'Local da Profissão Religiosa',
+  'local_batismo': 'Local de Batismo',
+  'materia_ensinada': 'Matéria Ensinada',
+  'nome_abade': 'Abade da Época'
+};
+
 // --- HELPERS ---
 
 const calculateAverageAge = (monks: Monk[]) => {
@@ -56,16 +68,13 @@ const BarChart = ({ data, colorClass }: { data: {label: string, value: number}[]
   const maxVal = Math.max(...data.map(d => d.value)) || 1;
   
   return (
-    // AUMENTO: Espaçamento maior entre itens (space-y-4) e margem superior (mt-6)
     <div className="space-y-4 mt-6">
       {data.slice(0, 8).map((item) => (
         <div key={item.label}>
-          {/* AUMENTO: Fonte maior (text-sm) */}
           <div className="flex justify-between text-sm mb-1">
             <span className="font-medium text-gray-700 truncate w-3/4" title={item.label}>{item.label}</span>
             <span className="font-bold text-gray-900">{item.value}</span>
           </div>
-          {/* AUMENTO: Barra mais grossa (h-3) */}
           <div className="w-full bg-gray-100 rounded-full h-3">
             <div 
               className={`h-3 rounded-full ${colorClass}`} 
@@ -79,6 +88,7 @@ const BarChart = ({ data, colorClass }: { data: {label: string, value: number}[]
   );
 };
 
+// --- PIE CHART SVG (Corrigido para rotação nativa) ---
 const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
   if (data.length === 0) return <div className="h-64 flex items-center justify-center text-gray-400 italic">Sem dados suficientes</div>;
 
@@ -86,36 +96,59 @@ const PieChart = ({ data }: { data: {label: string, value: number}[] }) => {
 
   const chartData = useMemo(() => {
     if (data.length <= 9) return data;
-    
     const top8 = data.slice(0, 8);
     const rest = data.slice(8);
     const restValue = rest.reduce((acc, curr) => acc + curr.value, 0);
-    
-    return [
-      ...top8,
-      { label: 'Outros / Diversos', value: restValue, isOther: true }
-    ];
+    return [...top8, { label: 'Outros / Diversos', value: restValue, isOther: true }];
   }, [data]);
-  
-  let currentAngle = 0;
-  const gradientParts = chartData.map((item, index) => {
-    const percentage = (item.value / total) * 100;
-    // @ts-ignore
-    const color = item.isOther ? COLOR_OTHER : COLORS[index % COLORS.length];
-    
-    const start = currentAngle;
-    const end = currentAngle + percentage;
-    currentAngle = end;
-    return `${color} ${start}% ${end}%`;
-  });
+
+  const getCoordinatesForPercent = (percent: number) => {
+    const x = Math.cos(2 * Math.PI * percent);
+    const y = Math.sin(2 * Math.PI * percent);
+    return [x, y];
+  };
+
+  let cumulativePercent = 0;
 
   return (
     <div className="flex flex-col items-center justify-center py-6">
-      <div 
-        className="w-80 h-80 rounded-full shadow-inner relative"
-        style={{ background: `conic-gradient(${gradientParts.join(', ')})` }}
-      >
-        <div className="absolute inset-0 m-auto w-40 h-40 bg-white rounded-full flex items-center justify-center shadow-sm flex-col">
+      <div className="relative w-80 h-80">
+        
+        {/* SVG com viewBox centralizado em 0,0 */}
+        <svg viewBox="-1 -1 2 2" className="w-full h-full">
+          {/* Grupo rotacionado -90 graus para começar do topo (meio-dia) */}
+          <g transform="rotate(-90)">
+            {chartData.map((slice, index) => {
+              const startPercent = cumulativePercent;
+              const slicePercent = slice.value / total;
+              const endPercent = startPercent + slicePercent;
+              cumulativePercent = endPercent;
+
+              // @ts-ignore
+              const color = slice.isOther ? COLOR_OTHER : COLORS[index % COLORS.length];
+
+              // Círculo completo
+              if (slicePercent >= 0.999) {
+                return <circle key={index} cx="0" cy="0" r="1" fill={color} />;
+              }
+
+              const [startX, startY] = getCoordinatesForPercent(startPercent);
+              const [endX, endY] = getCoordinatesForPercent(endPercent);
+              const largeArcFlag = slicePercent > 0.5 ? 1 : 0;
+
+              const pathData = [
+                `M 0 0`,
+                `L ${startX} ${startY}`,
+                `A 1 1 0 ${largeArcFlag} 1 ${endX} ${endY}`,
+                `L 0 0`,
+              ].join(' ');
+
+              return <path key={index} d={pathData} fill={color} stroke="white" strokeWidth="0.01" />;
+            })}
+          </g>
+        </svg>
+
+        <div className="absolute inset-0 m-auto w-40 h-40 bg-white rounded-full flex items-center justify-center shadow-sm flex-col z-10">
            <span className="text-4xl font-bold text-gray-700">{total}</span>
            <span className="text-sm text-gray-400 uppercase font-bold mt-1">Total</span>
         </div>
@@ -144,14 +177,34 @@ export function Dashboard({ monks }: DashboardProps) {
   const [selectedMetric, setSelectedMetric] = useState<keyof Monk>('ocupacao_oficio');
   const printRef = useRef<HTMLDivElement>(null);
 
+  // --- FUNÇÃO DE DOWNLOAD PROFISSIONAL (Usando onClone) ---
   const handleDownloadImage = async () => {
     if (printRef.current) {
       try {
-        const canvas = await html2canvas(printRef.current, { backgroundColor: '#ffffff', scale: 2 });
+        const canvas = await html2canvas(printRef.current, { 
+          backgroundColor: '#ffffff', 
+          scale: 2, // Alta resolução (Retina)
+          logging: false,
+          // onclone: Permite modificar a cópia do DOM antes de tirar a foto
+          // Aqui a gente expande o padding sem afetar a tela do usuário
+          onclone: (clonedDoc) => {
+            const printArea = clonedDoc.getElementById('print-area-container');
+            if (printArea) {
+              printArea.style.padding = '40px'; // Adiciona respiro
+              printArea.style.width = '1200px'; // Força uma largura boa para apresentação
+              printArea.style.maxWidth = 'none'; // Remove limitações
+            }
+          }
+        });
+
         const image = canvas.toDataURL("image/png");
         const link = document.createElement("a");
         link.href = image;
-        link.download = `grafico_acervo_${selectedMetric}_${new Date().toISOString().slice(0,10)}.png`;
+        // Nome do arquivo amigável e limpo
+        const safeTitle = (METRIC_TITLES[selectedMetric] || selectedMetric)
+          .replace(/\//g, '-')
+          .replace(/\s+/g, '_');
+        link.download = `Analise_${safeTitle}.png`;
         link.click();
       } catch (error) {
         console.error("Erro print:", error);
@@ -208,14 +261,9 @@ export function Dashboard({ monks }: DashboardProps) {
               // @ts-ignore
               onChange={(e) => setSelectedMetric(e.target.value)}
             >
-              <option value="ocupacao_oficio">Ocupação / Ofício</option>
-              <option value="doencas">Causa de Morte / Doenças</option>
-              <option value="pais_nascimento">País de Nascimento</option>
-              <option value="cidade_nascimento">Cidade de Nascimento</option>
-              <option value="local_profissao_religiosa">Local Profissão Religiosa</option>
-              <option value="local_batismo">Local de Batismo</option>
-              <option value="materia_ensinada">Matéria Ensinada</option>
-              <option value="nome_abade">Abade da Época</option>
+              {Object.entries(METRIC_TITLES).map(([key, label]) => (
+                 <option key={key} value={key}>{label}</option>
+              ))}
             </select>
           </div>
 
@@ -228,21 +276,24 @@ export function Dashboard({ monks }: DashboardProps) {
         </div>
 
         {/* Área de Captura */}
-        <div ref={printRef} className="p-8 bg-white grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Adicionamos o ID 'print-area-container' para o onclone achar */}
+        <div ref={printRef} id="print-area-container" className="p-8 bg-white grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           <div className="lg:col-span-2 flex flex-col items-center justify-center min-h-[400px]">
-            <h3 className="text-lg font-bold text-gray-800 mb-2 text-center uppercase tracking-wide">
-              Distribuição Proporcional
+            {/* TÍTULO DINÂMICO USANDO O MAPA */}
+            <h3 className="text-xl font-bold text-gray-800 mb-2 text-center uppercase tracking-wide">
+              Distribuição por: {METRIC_TITLES[selectedMetric] || selectedMetric}
             </h3>
             <p className="text-sm text-gray-400 mb-6 text-center">Baseado em {monks.length} registros filtrados</p>
             <PieChart data={statsData} />
           </div>
 
           <div className="border-l pl-8 border-gray-100 flex flex-col justify-center">
-            {/* AUMENTO: Título maior (text-lg) */}
-            <h3 className="text-lg font-bold text-gray-500 uppercase mb-4">Ranking (Top 8)</h3>
+            <h3 className="text-lg font-bold text-gray-500 uppercase mb-4">
+              Top 8: {METRIC_TITLES[selectedMetric] || selectedMetric}
+            </h3>
             <BarChart data={statsData} colorClass="bg-gray-600" />
-            
+
           </div>
 
         </div>
