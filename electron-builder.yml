@@ -14,8 +14,10 @@ asarUnpack:
 win:
   executableName: monk-manager
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
-  shortcutName: ${productName}
+  artifactName: "Dietario Volume 1.${ext}"
+  
+  shortcutName: "Dietario Volume 1"
+  
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
