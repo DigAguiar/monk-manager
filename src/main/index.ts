@@ -1,14 +1,13 @@
- import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import fs from 'fs' // <--- Importante para copiar arquivos
+import fs from 'fs' 
 
-// --- IMPORTAÇÕES DO NOSSO BANCO DE DADOS ---
-import { initDB, MonkDAO } from './db'
+// --- ATUALIZADO: Importar closeDB e connectDB ---
+import { initDB, MonkDAO, closeDB, connectDB } from './db'
 import { v4 as uuidv4 } from 'uuid'
 
-// Função auxiliar para saber onde está o banco
 const getDbPath = () => {
   return app.isPackaged
     ? join(app.getPath('userData'), 'monges.db')
@@ -16,7 +15,6 @@ const getDbPath = () => {
 }
 
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -55,9 +53,7 @@ app.whenReady().then(() => {
   // 1. Inicializa o Banco
   initDB()
 
-  // 2. CRUD (Nomes atualizados para bater com o Preload)
-  
-  // Create
+  // 2. CRUD
   ipcMain.handle('create-monk', async (_, data) => {
     try {
       const id = uuidv4()
@@ -69,7 +65,6 @@ app.whenReady().then(() => {
     }
   })
 
-  // Read
   ipcMain.handle('get-monks', async () => {
     try {
       return MonkDAO.getAll()
@@ -79,7 +74,6 @@ app.whenReady().then(() => {
     }
   })
 
-  // Update
   ipcMain.handle('update-monk', async (_, data) => {
     try {
       MonkDAO.update(data)
@@ -90,7 +84,6 @@ app.whenReady().then(() => {
     }
   })
 
-  // Delete
   ipcMain.handle('delete-monk', async (_, id) => {
     try {
       MonkDAO.delete(id)
@@ -101,9 +94,8 @@ app.whenReady().then(() => {
     }
   })
 
-  // --- 3. LÓGICA DE BACKUP E RESTORE (NOVO) ---
+  // --- 3. LÓGICA DE BACKUP E RESTORE (CORRIGIDA) ---
 
-  // Exportar Banco (Backup)
   ipcMain.handle('backup-db', async () => {
     const dbPath = getDbPath()
     
@@ -124,7 +116,6 @@ app.whenReady().then(() => {
     }
   })
 
-  // Importar Banco (Restore)
   ipcMain.handle('restore-db', async () => {
     const dbPath = getDbPath()
 
@@ -139,16 +130,24 @@ app.whenReady().then(() => {
     const backupFile = filePaths[0]
 
     try {
-      // Substitui o arquivo atual pelo backup
+      // 1. FECHA O BANCO ATUAL (Para liberar o arquivo)
+      closeDB()
+
+      // 2. Substitui o arquivo
       fs.copyFileSync(backupFile, dbPath)
       
-      // Recarrega a janela para atualizar os dados na tela
+      // 3. REABRE A CONEXÃO COM O NOVO ARQUIVO
+      connectDB()
+      
+      // 4. Recarrega a janela (agora com o banco novo conectado)
       const win = BrowserWindow.getAllWindows()[0]
       if (win) win.reload()
       
       return true
     } catch (error) {
       console.error('Erro ao restaurar:', error)
+      // Se der erro, tenta reconectar no antigo para não travar o app
+      connectDB() 
       return false
     }
   })

@@ -6,16 +6,34 @@ const dbPath = app.isPackaged
   ? join(app.getPath('userData'), 'monges.db')
   : join(__dirname, '../../monges.db');
 
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
+// Mudamos de 'const' para 'let' para poder reconectar
+let db: any;
 
-export function initDB() {
+// Função para fechar conexão (libera o arquivo para ser substituído)
+export function closeDB() {
+  if (db && db.open) {
+    db.close();
+  }
+}
+
+// Função para conectar (ou reconectar)
+export function connectDB() {
+  // Se já estiver aberto, fecha antes
+  if (db && db.open) db.close();
+
+  db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+  
+  // Garante que a estrutura existe
+  initTables();
+}
+
+function initTables() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS monges (
       id TEXT PRIMARY KEY,
       nome TEXT,
-      -- titulo REMOVIDO
-      ocupacao_oficio TEXT, -- Agora salva como JSON Array
+      ocupacao_oficio TEXT,
       data_nascimento TEXT,
       pais_nascimento TEXT,
       cidade_nascimento TEXT,
@@ -33,13 +51,18 @@ export function initDB() {
       exercicios_espirituais TEXT,
       doencas TEXT,
       data_falecimento TEXT,
-      nome_abade TEXT, -- NOVO
-      observacoes TEXT, -- NOVO
+      nome_abade TEXT,
+      observacoes TEXT,
       referencia_manuscrito TEXT,
       referencia_edicao TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     )
   `);
+}
+
+// Mantemos o export initDB para compatibilidade, mas ele agora chama o connectDB
+export function initDB() {
+  connectDB();
 }
 
 export const MonkDAO = {
@@ -51,14 +74,13 @@ export const MonkDAO = {
       local_profissao_religiosa: null, formacao: null,
       materia_ensinada: null, episodios_efemerides: null, exercicios_espirituais: null,
       doencas: null, data_falecimento: null, 
-      nome_abade: null, observacoes: null, // Novos
+      nome_abade: null, observacoes: null,
       referencia_manuscrito: null, referencia_edicao: null
     };
 
     const finalMonk = {
       ...defaultValues,
       ...monk,
-      // Garante que arrays virem texto JSON para o banco
       livros: JSON.stringify(monk.livros || []),
       ocupacao_oficio: JSON.stringify(monk.ocupacao_oficio || []) 
     };
@@ -91,7 +113,6 @@ export const MonkDAO = {
     const rows = stmt.all();
     return rows.map((row: any) => ({
       ...row,
-      // Converte de volta de Texto JSON para Array Real
       livros: row.livros ? JSON.parse(row.livros) : [],
       ocupacao_oficio: row.ocupacao_oficio ? JSON.parse(row.ocupacao_oficio) : []
     }));
